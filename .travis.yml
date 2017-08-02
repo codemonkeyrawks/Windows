@@ -1,0 +1,58 @@
+# Set Distro
+sudo: enabled
+dist: trusty
+
+# Set to Bash
+language: bash
+
+# Test Only Master Branch
+branches:
+  only:
+  - master
+
+# Cache ClamAV
+cache:
+  directories:
+  - clamav
+
+# Install: Updates, ClamAV, Shell-Check
+before_install:
+- sudo apt-get update
+- sudo apt-get install clamav -y
+
+# Copy from Cache (Virus Definitions)
+- if [ -d clamav/bytecode.cvd ]; then sudo cp clamav/bytecode.cvd /var/lib/clamav; fi
+- if [ -d clamav/daily.cvd ]; then sudo cp clamav/daily.cvd /var/lib/clamav; fi
+- if [ -d clamav/main.cvd ]; then sudo cp clamav/main.cvd /var/lib/clamav; fi
+
+# Main Program: Check if Code Builds
+script: 
+
+# Store Main Branch Directory
+- basedir="/home/travis/build/codemonkeyrawks/Windows"
+
+# Virus Check (ClamAV)
+- sudo freshclam
+- sudo clamscan -r "$basedir" --exclude-dir=/sys/ --quiet --infected --log="/var/log/scan.log"
+- sudo mv "/var/log/scan.log" "$basedir/scan.log"
+- sudo chown travis "$basedir/scan.log"
+
+# Check if (Debian Shell Script) is Virus Clean
+- scanresult="$(grep 'Infected files' $basedir/scan.log | cut -c17- )"
+- if [ "$scanresult" == "0" ]; then Output1="Passed"; else Output1="Virus Detected!"; fi
+
+# Final Output: Pass or Fail
+- echo -e "\e[33m---------------------------------\e[39m" 
+          "\nVirus Check      - $Output1"
+        "\n\e[33m---------------------------------\e[39m"
+
+# Sets a Flag to Fail (On Broken Script)
+- if [ "$Output1" == "Virus Detected!" ]; then exit 1; fi
+
+# After Build Script
+after_script:
+
+# Post to Cache (Updated Definitions)
+- sudo cp /var/lib/clamav/bytecode.cvd clamav
+- sudo cp /var/lib/clamav/daily.cvd clamav
+- sudo cp /var/lib/clamav/main.cvd clamav
